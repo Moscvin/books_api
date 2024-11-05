@@ -13,12 +13,12 @@ class BookController extends Controller
      */
     public function index()
     {
-        $books = Cache::rememberForever('books',function()
-        {
+        // Cachează lista de cărți permanent până la actualizare manuală
+        $books = Cache::store('redis')->rememberForever('books', function() {
             return Book::all();
         });
-        dd($books->pluck('title'));
-        return response()->json(Book::all(), 200);
+
+        return response()->json($books, 200);
     }
 
     /**
@@ -34,7 +34,14 @@ class BookController extends Controller
                 'genre' => 'required|string',
             ]
         );
-        $book=Book::create($request->all());
+
+        // Creează și salvează o carte nouă în baza de date
+        $book = Book::create($request->all());
+
+        // Cachează cartea nou creată și actualizează cache-ul listei de cărți
+        Cache::store('redis')->forever('book:' . $book->id, $book); // Cachează permanent cartea
+        Cache::store('redis')->forget('books'); // Șterge cache-ul listei pentru a se reînnoi la următoarea cerere
+
         return response()->json($book, 201);
     }
 
@@ -43,14 +50,16 @@ class BookController extends Controller
      */
     public function show(string $id)
     {
-        $book = Cache::store('redis')->get('book:' . $id);
-        dd($book->title);
-        
-        // if ($book) {
-        //     return response()->json($book, 200);
-        // } else {
-        //     return response()->json(['message' => 'Book not found'], 404);
-        // }
+        // Încearcă să obții cartea din cache, altfel o caută în baza de date
+        $book = Cache::store('redis')->rememberForever('book:' . $id, function () use ($id) {
+            return Book::find($id);
+        });
+
+        if ($book) {
+            return response()->json($book, 200);
+        } else {
+            return response()->json(['message' => 'Book not found'], 404);
+        }
     }
 
     /**
@@ -63,6 +72,7 @@ class BookController extends Controller
         {
             return response()->json(['message' => 'Book not found'], 404);
         }
+
         $request->validate(
             [
                 'title' => 'required|string',
@@ -71,7 +81,14 @@ class BookController extends Controller
                 'genre' => 'required|string',
             ]
         );
+
+        // Actualizează cartea în baza de date
         $book->update($request->all());
+
+        // Actualizează cache-ul pentru cartea specifică și pentru lista de cărți
+        Cache::store('redis')->forever('book:' . $book->id, $book); // Re-cachează cartea permanent
+        Cache::store('redis')->forget('books'); // Șterge cache-ul listei pentru a fi reîmprospătat
+
         return response()->json($book, 200);
     }
 
@@ -84,7 +101,12 @@ class BookController extends Controller
         if(!$book){
             return response()->json(['message' => 'Book not found'], 404);
         }
+
+        // Șterge cartea din baza de date și din cache
         $book->delete();
+        Cache::store('redis')->forget('book:' . $id); // Șterge cartea din cache
+        Cache::store('redis')->forget('books'); // Șterge cache-ul listei pentru reîmprospătare
+
         return response()->json(['message' => 'Book deleted'], 200);
     }
 }
