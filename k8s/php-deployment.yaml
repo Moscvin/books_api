@@ -1,0 +1,51 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: laravel-app
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: laravel-app
+  template:
+    metadata:
+      labels:
+        app: laravel-app
+    spec:
+      imagePullSecrets:
+        - name: regcred               # Secret pentru autentificare Docker
+      containers:
+        - name: php
+          image: moscvin/books_api-php:latest
+          ports:
+            - containerPort: 9000
+          env:
+            - name: DB_HOST
+              value: "mysql"          # Conexiune MySQL
+            - name: DB_DATABASE
+              value: "book_api"       # Consistent cu .env
+            - name: DB_USERNAME
+              value: "root"
+            - name: DB_PASSWORD
+              value: "root"
+            - name: REDIS_HOST
+              value: "redis"
+          volumeMounts:
+            - name: storage
+              mountPath: /var/www/html/storage
+      volumes:
+        - name: storage
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: laravel-service
+spec:
+  selector:
+    app: laravel-app
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 9000
+  type: LoadBalancer
