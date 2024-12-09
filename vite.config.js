@@ -8,4 +8,8 @@ export default defineConfig({
             refresh: true,
         }),
     ],
+    build: {
+        outDir: 'dist', // Schimbă directorul de ieșire la `dist`
+        emptyOutDir: true, // Asigură-te că directorul este curățat la fiecare build
+    },
 });
